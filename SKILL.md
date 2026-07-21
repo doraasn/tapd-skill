@@ -310,6 +310,39 @@ mcporter --config <skill>/config/mcporter.json call tapd-cn-mcp.<工具名> [key
 
 ---
 
+## 并发优化
+
+### 瓶颈分析
+
+每次 `mcporter call` 都会启动一个 `mcp-server-tapd` 进程，**单次启动耗时约 3~5 秒**。串行遍历 15 个项目 × 3 种 entity_type = 45 次调用，总耗时可达 **2~4 分钟**。
+
+### 并行策略
+
+| 场景 | 策略 | 实现 |
+|------|------|------|
+| 查所有项目待办 | 按 (项目, entity_type) 拆分，用 `ThreadPoolExecutor(max_workers=20)` 并行 | `tapd_common.for_all_projects()` |
+| 查所有项目花费 | 同上 | `timesheet_query.py` 中的 `ThreadPoolExecutor` |
+| 查多个需求详情 | 跨项目并行查 `get_stories_or_tasks` | `todo_query.py` 第二阶段 |
+| 批量移期 | 各需求独立计算，并行更新 | `reschedule.py` 中可用 `ThreadPoolExecutor` |
+
+### 速度对比
+
+| 操作 | 串行（预估） | 并行（实际） |
+|------|-------------|-------------|
+| 查全部项目待办（story/bug/task） | 2~4 min | ~15s |
+| 查全部项目花费 | 1~2 min | ~10s |
+| 查需求详情（3 个项目） | ~30s | ~8s |
+
+### TAPD REST API 直调（更快）
+
+`get_stories_by_api()` 直接调 `https://api.tapd.cn/stories`，**无需启动 mcporter 进程**，单次调用仅需 ~0.5s。相比 mcporter 的 `get_stories_or_tasks`（3~5s + 只能查 10 条），速度提升 **6~10 倍** + 数据完整。
+
+**什么时候用：**
+- 需要查大量需求的完整详情（begin/due/owner/effort）→ 用 API 直调
+- 需要写操作（更新排期、记工时）→ 只能用 mcporter（MCP 封装了写逻辑）
+
+---
+
 ## 角色场景
 
 ### 研发
