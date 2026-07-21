@@ -523,49 +523,118 @@ mcporter --config <skill>/config/mcporter.json call tapd-cn-mcp.<工具名> [key
 
 ---
 
+## 使用示例（真实数据）
+
+### 示例 1：查今日待办
+
+**命令：**
+```powershell
+.\scripts\tapd.ps1 todo
+```
+
+**输出：**
+```
+| ID | 需求 | 处理人 | 优先级 | 排期 | 预估工时 |
+|----|------|--------|--------|------|----------|
+| 01006273 | 调用算法接口时的数据来源排查... | 俞金涛;孟学朝;魏旋旋; | Middle | 2026-07-16~2026-07-30 | 88h |
+| 01006327 | 7、过程控制 | 俞金涛; | Middle | 2026-07-23~2026-07-27 | 24h |
+| 01006238 | **产品画像-营销模块页面构建** | 俞金涛; | High | 2026-08-13~2026-08-19 | 40h |
+```
+
+### 示例 2：查花费
+
+**命令：**
+```powershell
+.\scripts\tapd.ps1 timesheet 2026-07-20
+```
+
+**输出：**
+```
+**敬业水电平衡项目（9.55h）**
+1. 逻辑梳理与设计，确定开发形式，并进行功能开发：9.55h。
+
+**合计：9.55h**
+```
+
+### 示例 3：记工时
+
+**命令：**
+```powershell
+.\scripts\tapd.ps1 hours 30139507 1130139507001006126 2
+```
+
+（给"需求对接"记 2 小时工时，若有重复记录自动更新）
+
+### 示例 4：排期
+
+**命令：**
+```powershell
+.\scripts\tapd.ps1 schedule 30139507 1130139507001006126 2026-07-22 3
+```
+
+（将"需求对接"排期设为 07-22 开始，3 个工作日 = 24h，周末自动跳过）
+
+### 示例 5：直接调 MCP
+
+**命令：**
+```powershell
+# 查某个项目所有待办需求
+mcporter --config config\mcporter.json call tapd-cn-mcp.get_todo workspace_id=30139507 entity_type=story
+
+# 查某项目成员列表
+mcporter --config config\mcporter.json call tapd-cn-mcp.get_workspace_users workspace_id=30139507
+
+# 更新需求状态（先查可流转状态）
+mcporter --config config\mcporter.json call tapd-cn-mcp.get_workflows_all_transitions workspace_id=30139507 options.system=story options.workitem_type_id=<类型ID>
+```
+
+---
+
 ## AI 加载后可用工具速查
+
+> 详细示例见上方 **「使用示例」** 章节。以下为速查表。
 
 ### Windows PowerShell
 ```powershell
 # 查今日待办
-python <skill>\scripts\todo_query.py
 .\scripts\tapd.ps1 todo
 
-# 查花费
+# 查花费（默认今天，可指定日期）
 .\scripts\tapd.ps1 timesheet
 .\scripts\tapd.ps1 timesheet 2026-07-20
 
 # 记工时
-.\scripts\tapd.ps1 hours 30139507 <ID> 4
+.\scripts\tapd.ps1 hours 30139507 <需求ID> 时数
+.\scripts\tapd.ps1 hours 30139507 1130139507001006126 2 "备注"
 
 # 排期
-.\scripts\tapd.ps1 schedule 30139507 <ID> 2026-07-21 5
+.\scripts\tapd.ps1 schedule 30139507 <需求ID> 2026-07-22 3
 
 # 移期
-.\scripts\tapd.ps1 move 30139507 3 <ID1> <ID2>
+.\scripts\tapd.ps1 move 30139507 3 <需求ID1> <需求ID2>
 
 # MCP 直接调用
-mcporter --config <skill>\config\mcporter.json call tapd-cn-mcp.get_todo workspace_id=30139507 entity_type=story
+mcporter --config config\mcporter.json call tapd-cn-mcp.get_todo workspace_id=30139507 entity_type=story
 ```
 
 ### macOS / Linux Bash
 ```bash
 # 查今日待办
-python3 <skill>/scripts/todo_query.py
 bash scripts/tapd.sh todo
 
 # 查花费
 bash scripts/tapd.sh timesheet
+bash scripts/tapd.sh timesheet 2026-07-20
 
 # 记工时
-bash scripts/tapd.sh hours 30139507 <ID> 4
+bash scripts/tapd.sh hours 30139507 <需求ID> 时数
 
 # 排期
-bash scripts/tapd.sh schedule 30139507 <ID> 2026-07-21 5
+bash scripts/tapd.sh schedule 30139507 <需求ID> 2026-07-22 3
 
 # 移期
-bash scripts/tapd.sh move 30139507 3 <ID1> <ID2>
+bash scripts/tapd.sh move 30139507 3 <需求ID1> <需求ID2>
 
 # MCP 直接调用
-mcporter --config <skill>/config/mcporter.json call tapd-cn-mcp.get_todo workspace_id=30139507 entity_type=story
+mcporter --config config/mcporter.json call tapd-cn-mcp.get_todo workspace_id=30139507 entity_type=story
 ```
