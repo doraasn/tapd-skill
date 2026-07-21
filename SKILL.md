@@ -78,13 +78,13 @@ which mcp-server-tapd 2>/dev/null || python3 -c "import sys; print(f'{sys.exec_p
 mcporter --config <skill>/config/mcporter.json call tapd-cn-mcp.get_user_participant_projects
 ```
 
-**昵称自动发现**：Token 有效后，调用 `get_todo` 查看返回数据中的 `creator` 字段即可确认当前用户的昵称，或者从 `get_workspace_users` 列表中推断。将发现的昵称写入 `config.json` 的 `user.nick`。
+**昵称自动发现**：Token 有效后，调用 `get_todo` 查看返回数据中的 `creator` 字段即可确认当前用户的昵称，或者从 `get_workspace_users` 列表中推断。将发现的昵称写入 `tapd.user.json` 的 `user.nick`。
 
 > **注意**：所有数据的"处理人"字段都使用用户昵称（如 `owner`、`developer`、`current_owner`），不依赖 `user_id`，因此只需昵称即可完成全部查询操作。
 
 ### Step 4 — 自动发现并保存项目列表
 
-连接成功后，调用 `get_user_participant_projects` 获取完整的项目列表，然后将结果写入 `config.json` 的 `projects` 字段：
+连接成功后，调用 `get_user_participant_projects` 获取完整的项目列表，然后将结果写入 `tapd.user.json` 的 `projects` 字段：
 
 ```json
 "projects": [
@@ -106,9 +106,9 @@ mcporter --config <skill>/config/mcporter.json call tapd-cn-mcp.get_user_partici
 | 场景 | 操作 | 目标文件 |
 |------|------|----------|
 | 用户主动提供新 Token | 更新 `args[1]` 值 | `config/mcporter.json` |
-| 用户发起查待办/查花费等操作 | 自动使用 `config.json` 中的项目列表遍历 | （只读）|
-| 用户新增项目参与 | 重新运行 Step 4 同步项目列表 | `config.json` |
-| 用户提供新的优先级映射 | 更新 `priority_mapping` | `config.json` |
+| 用户发起查待办/查花费等操作 | 自动使用 `tapd.user.json` 中的项目列表遍历 | （只读）|
+| 用户新增项目参与 | 重新运行 Step 4 同步项目列表 | `tapd.user.json` |
+| 用户提供新的优先级映射 | 更新 `priority_mapping` | `tapd.user.json` |
 
 > **重要**：任何时候都不要硬编码 Token 到 SKILL.md 或 Python 脚本中。Token 只存在于 `config/mcporter.json`。
 
@@ -119,8 +119,8 @@ mcporter --config <skill>/config/mcporter.json call tapd-cn-mcp.get_user_partici
 ```
 tapd/                          # skill 根目录
 ├── SKILL.md                   # 本文件 — Skill 主说明（AI 加载入口）
-├── config.json                # 个人配置（用户身份、项目列表、优先级映射）
-├── config.template.json       # 配置模板（供新用户初始化参考）
+├── tapd.user.json                # 个人配置（用户身份、项目列表、优先级映射）
+├── tapd.user.template.json       # 配置模板（供新用户初始化参考）
 ├── scripts/
 │   ├── tapd_common.py         # 共享模块（mcporter 连接、配置加载、工作日工具）
 │   ├── todo_query.py          # 查今日待办（遍历所有项目）
@@ -235,7 +235,7 @@ mcporter --config <skill>/config/mcporter.json call tapd-cn-mcp.<工具名> [key
 
 ### 参与项目
 
-详见 `config.json` 的 `projects` 字段。共 15 个 project + 2 个 product。
+详见 `tapd.user.json` 的 `projects` 字段。共 15 个 project + 2 个 product。
 
 ---
 
@@ -436,24 +436,54 @@ mcporter --config <skill>/config/mcporter.json call tapd-cn-mcp.<工具名> [key
 
 ---
 
-## 展示格式
+## 展示格式（AI 必遵守）
 
-### 待办
-```
-| 项目 | ID | 需求 | 处理人 | 优先级 | 排期 | 预估工时 |
-```
-- High 标粗；排期为空显示 "-"；按项目分组
+> AI 手动输出或脚本输出都必须严格遵守以下格式。格式不一致会导致用户投诉。
 
-### 花费
+### 待办展示格式
+
+当用户要求查待办时，**必须**输出以下 Markdown 表格，字段顺序不可变：
+
+```
+| ID | 需求 | 处理人 | 优先级 | 排期 | 预估工时 |
+```
+
+**规则：**
+1. 按项目分组，每个项目一个表格，项目名前加 `##` 标题
+2. 每行 **必须有** 处理人、排期（开始~结束）、预估工时，查不到则填 `-`
+3. 优先级为 `High` 或 `Urgent` 时，需求名称用 `**加粗**`
+4. 排期格式：`2026-07-16~2026-07-30`（开始~结束），无排期填 `-`
+5. 预估工时格式：`88h`（数字 + h），无为 `-`
+6. 先查 `get_todo` 拿基础列表，再用 `get_stories_or_tasks` 或 TAPD REST API 补全详情
+
+**正确示例：**
+```
+| ID | 需求 | 处理人 | 优先级 | 排期 | 预估工时 |
+|----|------|--------|--------|------|----------|
+| 01006273 | 调用算法接口... | 俞金涛; | Middle | 2026-07-16~2026-07-30 | 88h |
+| 01006238 | **产品画像** | 俞金涛; | High | 2026-08-13~2026-08-19 | 40h |
+| 01006126 | 需求对接 | - | - | - | - |
+```
+
+### 花费展示格式
+
+当用户要求查花费时，**必须**按以下格式输出：
+
 ```
 **项目名（总工时）**
 1. 需求名称：花费备注；
 2. 需求名称：花费备注。
 **合计：xh**
 ```
-- 末条句号，其余分号；工时统一 h；不需要链接/表格/ID
 
-### 排期
+**规则：**
+- 编号列表，最后一条用句号，其余用分号
+- 工时统一用小时（h），分钟要转为小时（1h44m → 1.73h）
+- 不需要链接、不需要表格、不需要 TAPD ID
+- 父需求记工时到子需求上时，展示用**父需求名称**
+
+### 排期展示格式
+
 ```
 | 需求 | 排期 | 工作日 | 预估工时 |
 ```

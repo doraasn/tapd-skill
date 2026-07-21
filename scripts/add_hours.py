@@ -47,7 +47,7 @@ def main():
     memo = sys.argv[5] if len(sys.argv) > 5 else ""
 
     if not USER_NICK:
-        print("[错误] config.json 中未设置 user.nick")
+        print("[错误] tapd.user.json 中未设置 user.nick")
         sys.exit(1)
     if timespent is None:
         print("[错误] 请输入工时小时数")

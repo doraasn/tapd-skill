@@ -33,7 +33,7 @@ def _get_token():
     return None
 
 # ---- 配置加载 ----
-config_path = os.path.join(SKILL_DIR, "config.json")
+config_path = os.path.join(SKILL_DIR, "tapd.user.json")
 try:
     with open(config_path, encoding="utf-8") as f:
         CONFIG = json.load(f)
