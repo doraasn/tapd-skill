@@ -1,0 +1,18 @@
+{
+  "user": {
+    "nick": "你的TAPD昵称"
+  },
+  "connection": {
+    "mcporter_config": "config/mcporter.json"
+  },
+  "projects": [
+    { "id": "项目ID", "name": "项目名称", "type": "project" }
+  ],
+  "priority_mapping": {
+    "Urgent": "紧急",
+    "High": "高",
+    "Middle": "中",
+    "Low": "低",
+    "Nice To Have": "无关紧要"
+  }
+}
