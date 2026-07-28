@@ -1,12 +1,12 @@
 """
 TAPD 整体移期
-将指定项目的多个需求整体后移 N 天，自动处理周末顺延。
+批量后移多个需求的排期 N 天，周末自动顺延
 
-用法:
-  python scripts/reschedule.py <项目ID> <天数> <需求ID1> [需求ID2 ...]
+用法：
+  python3 scripts/reschedule.py <项目ID> <天数> <需求ID1> [需求ID2 ...]
 
-示例:
-  python scripts/reschedule.py 30139507 3 1130139507001006273 1130139507001006126
+示例：
+  python3 scripts/reschedule.py 30139507 3 1130139507001006273 1130139507001006126
 """
 import sys, json
 from datetime import date, timedelta
@@ -14,7 +14,7 @@ from tapd_common import run_mcporter, parse_result, working_days, find_end_date,
 
 
 def get_story(pid, sid):
-    """获取需求的 begin/due/effort"""
+    """查需求的 begin/due/effort"""
     raw = run_mcporter("tapd-cn-mcp.get_stories_or_tasks", workspace_id=pid,
                        options={"entity_type": "story", "id": sid,
                                 "fields": "id,name,begin,due,effort,priority_label,priority"})
@@ -47,7 +47,7 @@ def main():
     for sid in story_ids:
         s = get_story(pid, sid)
         if not s:
-            errors.append(f"{sid}: 未找到需求")
+            errors.append(f"{sid}: 找不到需求")
             continue
         if not s["begin"]:
             errors.append(f"{sid} ({s['name']}): 无排期，跳过")
@@ -57,7 +57,7 @@ def main():
         old_due = date.fromisoformat(s["due"])
         old_workdays = working_days(old_begin, old_due) if old_begin != old_due else 1
 
-        # 新开始 = 原开始 + 移动天数，遇周末顺延
+        # 新开始 = 旧开始 + 移动天数，周末顺延
         new_begin = next_workday(old_begin + timedelta(days=move_days))
         new_due = find_end_date(new_begin, old_workdays)
         new_effort = working_days(new_begin, new_due) * 8

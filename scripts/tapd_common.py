@@ -1,6 +1,5 @@
-"""
-TAPD 脚本共享模块 — mcporter 连接、配置加载、公共工具函数
-所有 scripts/*.py 都从此导入，避免重复代码。
+"""TAPD 通用模块 — mcporter 调用、配置加载、工作日工具
+所有 scripts/*.py 都从这里导入配置和公共函数。
 """
 import subprocess, json, sys, os, shutil
 from datetime import date, timedelta
@@ -8,16 +7,16 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 SKILL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# ---- mcporter 自动查找 ----
+# ----- mcporter 查找 -----
 _mcporter = shutil.which("mcporter") or shutil.which("mcporter.cmd")
 if not _mcporter:
-    print("[错误] 未找到 mcporter，请执行 npm install -g mcporter")
+    print("[错误] 找不到 mcporter，请先执行 npm install -g mcporter")
     sys.exit(1)
 
 MCPORTER = [_mcporter, "--config",
             os.path.join(SKILL_DIR, "config", "mcporter.json"), "call"]
 
-# ---- Token 提取（用于直接调 TAPD REST API） ----
+# ----- Token 获取（用于直接调用 TAPD REST API） -----
 def _get_token():
     """从 mcporter.json 提取 TAPD Access Token"""
     mcp_path = os.path.join(SKILL_DIR, "config", "mcporter.json")
@@ -32,7 +31,7 @@ def _get_token():
         pass
     return None
 
-# ---- 配置加载 ----
+# ----- 配置加载 -----
 config_path = os.path.join(SKILL_DIR, "config.json")
 try:
     with open(config_path, encoding="utf-8") as f:
@@ -47,7 +46,7 @@ except Exception:
 def run_mcporter(selector, options=None, **params):
     """调用 mcporter MCP 工具，返回解析后的 dict
     - params: 顶级参数，如 workspace_id=30139507
-    - options: 可以是 dict（转为 options.key=value）或 str（直接作为 options=<str> 传递）
+    - options: 可以是 dict（展开为 options.key=value）或 str（直接传递 options=<str>）
     """
     args = [f"{k}={v}" for k, v in params.items()]
     if isinstance(options, dict):
@@ -67,8 +66,8 @@ def run_mcporter(selector, options=None, **params):
 def parse_result(raw):
     """
     解析返回结果：
-    - dict 且含 result(key) → 嵌套 JSON 字符串（get_stories_or_tasks 等）
-    - dict 且有 data(key) → 直接数据（get_todo 等）
+    - dict 带 result(key) → 内部 JSON 字符串的 data（get_stories_or_tasks 等）
+    - dict 带 data(key) → 直接返回数组（get_todo 等）
     """
     if raw is None or not isinstance(raw, dict):
         return []
@@ -82,9 +81,10 @@ def parse_result(raw):
 
 
 def for_all_projects(entity_types, fn):
-    """并行对所有项目执行 fn(pid, entity_type)，返回 { pid: { entity_type: [items] } }"""
+    """遍历所有项目并行执行 fn(pid, entity_type)，返回 { pid: { entity_type: [items] } }"""
     results = {}
-    with ThreadPoolExecutor(max_workers=20) as ex:
+    # N1 为双核设备，限制并发以避免大量 mcporter 子进程争抢 CPU 和内存。
+    with ThreadPoolExecutor(max_workers=8) as ex:
         futures = {}
         for p in PROJECTS:
             for et in entity_types:
@@ -101,15 +101,14 @@ def for_all_projects(entity_types, fn):
     return results
 
 
-# ---- 工作日工具 ----
+# ----- 工作日工具 -----
 def working_days(start, end):
-    """计算 start~end 之间的工作日数（含两端）"""
+    """计算 start~end 之间的工作日数（不含周末）"""
     return sum(1 for i in range((end - start).days + 1)
                if (start + timedelta(i)).weekday() < 5)
 
-
 def find_end_date(start, target_days):
-    """从 start 往后找第 target_days 个工作日"""
+    """从 start 开始数 target_days 个工作日"""
     d, count = start, 0
     while True:
         if d.weekday() < 5:
@@ -118,7 +117,6 @@ def find_end_date(start, target_days):
             return d
         d += timedelta(days=1)
 
-
 def next_workday(d):
     """如果 d 落在周末，顺延到周一"""
     while d.weekday() >= 5:
@@ -126,18 +124,18 @@ def next_workday(d):
     return d
 
 
-# ---- TAPD REST API 直调（绕过 MCP Server 的 limit 等 bug） ----
+# ----- TAPD REST API 直连（绕过 MCP Server 的 limit bug） -----
 _TAPD_TOKEN = _get_token()
 
 def get_stories_by_api(pid, entity_type="story", fields=None):
     """
-    通过 TAPD REST API 直接查需求/任务详情。
-    MCP Server 的 get_stories_or_tasks 有 limit/page 不生效的 bug，
-    此函数作为替代。
-    返回 { id: detail_dict } 字典。
+    直接调用 TAPD REST API 查询功能/任务列表。
+    MCP Server 的 get_stories_or_tasks 的 limit/page 都不生效的 bug，
+    这里是替代方案。
+    返回 { id: detail_dict } 格式。
     """
     if not _TAPD_TOKEN:
-        # fallback 到 mcporter
+        # fallback 走 mcporter
         raw = run_mcporter("tapd-cn-mcp.get_stories_or_tasks",
                            options={"entity_type": entity_type,
                                     "fields": fields or "id,name,begin,due,owner,effort,priority_label,developer"})

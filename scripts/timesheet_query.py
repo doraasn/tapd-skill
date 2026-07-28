@@ -1,11 +1,11 @@
 """
 TAPD 花费查询
-遍历所有项目，查指定日期范围内某用户的工时，按项目汇总展示。
+遍历所有项目，查用户的工时花费，按项目汇总
 
-用法:
-  python scripts/timesheet_query.py                     # 今天
-  python scripts/timesheet_query.py 2026-07-20          # 指定日期
-  python scripts/timesheet_query.py 2026-07-13 2026-07-20  # 日期范围
+用法：
+  python3 scripts/timesheet_query.py                      # 今天
+  python3 scripts/timesheet_query.py 2026-07-20           # 指定日期
+  python3 scripts/timesheet_query.py 2026-07-13 2026-07-20  # 日期范围
 """
 import sys
 from datetime import date
@@ -13,13 +13,13 @@ from tapd_common import run_mcporter, parse_result, PROJECTS, USER_NICK
 
 
 def get_timesheets(pid, owner, start_date, end_date):
-    """查某项目某用户的工时"""
+    """查项目下某用户的工时"""
     raw = run_mcporter("tapd-cn-mcp.get_timesheets", workspace_id=pid,
                        options=f'{{"owner":"{owner}","spentdate":"{start_date}","limit":"200"}}')
     items = parse_result(raw)
     # 过滤日期范围
     if isinstance(items, list):
-        items = [i for i in items if start_date <= (i.get("Timesheet", {}) or i).get("spentdate", "") <= end_date]
+        items = [i for i in items if start_date <= (i.get("Timesheet", i) or i).get("spentdate", "") <= end_date]
     return items
 
 
@@ -32,8 +32,8 @@ def main():
     else:
         start_date = end_date = today
 
-    user = USER_NICK or input("请输入 TAPD 昵称: ").strip()
-    print(f"=== 查花费: {user}  {start_date} ~ {end_date} ===\n")
+    user = USER_NICK or input("请输入 TAPD 昵称：").strip()
+    print(f"=== 花费查询: {user}  {start_date} ~ {end_date} ===\n")
 
     from concurrent.futures import ThreadPoolExecutor, as_completed
     all_data = {}
@@ -49,7 +49,7 @@ def main():
                 all_data[p["id"]] = (p["name"], items)
 
     if not all_data:
-        print("(该时段无花费记录)\n")
+        print("(该时间段无花费记录)\n")
         return
 
     grand_total = 0.0
@@ -61,7 +61,7 @@ def main():
             hours = float(ts.get("timespent", 0) or 0)
             total += hours
             memo = ts.get("memo", "") or ""
-            # 尽量取需求名称（没有 ID 则显示 ID）
+            # 获取需求名称（没有名称则显示 ID）
             entity_id = ts.get("entity_id", "")
             lines.append((hours, memo[:40] if memo else f"需求ID: {entity_id}"))
         grand_total += total

@@ -173,34 +173,15 @@ tapd/                          # skill 根目录
 | pip | `python -m pip --version` | `python3 -m pip --version` | — |
 | mcp-server-tapd | `python -m pip install mcp-server-tapd` | `python3 -m pip install mcp-server-tapd` | `mcp-server-tapd --help` |
 
-> **mcp-server-tapd 执行路径**：
-> - Windows: `C:\Python路径\Scripts\mcp-server-tapd.exe`
-> - macOS/Linux: 通常在 `$(python3 -c "import sys; print(sys.exec_prefix)")/bin/mcp-server-tapd`
->
-> AI 可通过 `python -c "import sys; print(sys.exec_prefix)"` 或 `which mcp-server-tapd` 定位，填入 `config/mcporter.json` 的 `command` 字段。
-
 ---
 
 ## 连接方式
 
 ### MCP 配置
 
-MCP Server 定义在 `config/mcporter.json`。不同平台 `command` 路径不同：
+MCP Server 定义在 `config/mcporter.json`。
 
-**Windows 示例：**
-```json
-{
-  "mcpServers": {
-    "tapd-cn-mcp": {
-      "command": "C:\\DevTools\\Python\\Python313\\Scripts\\mcp-server-tapd.exe",
-      "args": ["--access-token", "<TOKEN>", "--mode", "stdio"],
-      "env": {}
-    }
-  }
-}
-```
-
-**macOS / Linux 示例：**
+**Linux 示例：**
 ```json
 {
   "mcpServers": {
@@ -218,10 +199,6 @@ MCP Server 定义在 `config/mcporter.json`。不同平台 `command` 路径不�
 mcporter --config <skill>/config/mcporter.json call tapd-cn-mcp.<工具名> [key=value ...]
 ```
 
-**便捷脚本：**
-- Windows: `.\scripts\tapd.ps1 call tapd-cn-mcp.<工具名> [参数...]`
-- macOS/Linux: `bash scripts/tapd.sh call tapd-cn-mcp.<工具名> [参数...]`
-
 ### 参数传递
 
 - 顶级参数：`key=value` 格式，如 `workspace_id=30139507`
@@ -235,7 +212,7 @@ mcporter --config <skill>/config/mcporter.json call tapd-cn-mcp.<工具名> [key
 
 ### 参与项目
 
-详见 `config.json` 的 `projects` 字段。共 15 个 project + 2 个 product。
+详见 `config.json` 的 `projects` 字段。
 
 ---
 
@@ -316,7 +293,7 @@ mcporter --config <skill>/config/mcporter.json call tapd-cn-mcp.<工具名> [key
 
 #### 查待办
 - 今日有哪些待处理的需求、缺陷、任务
-- 脚本：`.\scripts\tapd.ps1 todo`
+- 脚本：`bash scripts/tapd.sh todo`
 - MCP：`get_todo` 遍历所有项目（story / bug / task）
 - 查询规则：不要加状态过滤，需求看 `developer`/`owner`，缺陷看 `current_owner`
 
@@ -327,21 +304,17 @@ mcporter --config <skill>/config/mcporter.json call tapd-cn-mcp.<工具名> [key
 
 #### 记工时
 - 记录今天在某需求上的工时花费
-- 脚本：`.\scripts\tapd.ps1 hours <项目ID> <需求ID> <时数>`
+- 脚本：`bash scripts/tapd.sh hours <项目ID> <需求ID> <时数>`
 - 规则：同一天同一需求只能记一条（有则自动 update），父需求不可记
 
 #### 排期
 - 为需求设置开始/结束时间
-- 脚本：`.\scripts\tapd.ps1 schedule <项目ID> <需求ID> <开始日期> <工作日数>`
+- 脚本：`bash scripts/tapd.sh schedule <项目ID> <需求ID> <开始日期> <工作日数>`
 - 规则：1 天 = 8 小时，遇周末自动顺延
 
 #### 个人工作总结
 - 今天/昨天完成了哪些需求，解决了哪些 bug，还有哪些待办
 - 适用于日报/站会同步
-- 作法：
-  1. `get_todo` 查待办
-  2. `get_stories_or_tasks` 查开发人员是我、最近修改时间是今天/昨天的需求
-  3. `get_bug` 查处理人是我的 bug
 
 ### 测试
 
@@ -359,79 +332,58 @@ mcporter --config <skill>/config/mcporter.json call tapd-cn-mcp.<工具名> [key
 
 #### 团队工作汇总
 - 今天团队产生了/修复了多少 bug 单
-- 作法：`get_bug` 查创建时间=今天，或者最近修改时间=今天且状态为已结束
 
 #### 迭代进度
 - 当前迭代完成了哪些需求
-- 作法：
-  1. `get_iterations` 查迭代
-  2. `get_stories_or_tasks` 查迭代内的需求和任务
-  3. 按状态分组
 
 ### 项目管理
 
 #### 发布计划
 - 各版本/发布计划里包含哪些需求
-- MCP：`get_release_info` 查发布计划
 
 #### 工作总结
 - 本迭代完成的需求汇总，用于发布日志
-- 作法同迭代进度
 
 ---
 
-## 常用操作（技术与脚本）
+## 常用操作
 
-### 1. 查待办（快捷）
+### 1. 查待办
 
-```powershell
-.\scripts\tapd.ps1 todo
+```bash
+bash scripts/tapd.sh todo
 ```
 
 ### 2. 查花费
 
-```powershell
-.\scripts\tapd.ps1 timesheet           # 今天
-.\scripts\tapd.ps1 timesheet 2026-07-20             # 指定日期
+```bash
+bash scripts/tapd.sh timesheet
+bash scripts/tapd.sh timesheet 2026-07-20
 ```
-
-- MCP：`get_timesheets` 参数 workspace_id、owner、spentdate
-- 遍历所有项目
 
 ### 3. 记工时
 
-```powershell
-.\scripts\tapd.ps1 hours 30139507 <需求ID> 4               # 记4小时（今天）
-.\scripts\tapd.ps1 hours 30139507 <需求ID> 8 2026-07-20 "备注"
+```bash
+bash scripts/tapd.sh hours 30139507 <需求ID> 4
+bash scripts/tapd.sh hours 30139507 <需求ID> 8 2026-07-20 "备注"
 ```
-
-- 同一天同一需求只能记一条；追加用 `update_timesheets`
-- 父需求不可记工时
-- `timespent` 用小时数（支持小数，如 1.73）
 
 ### 4. 排期
 
-```powershell
-.\scripts\tapd.ps1 schedule 30139507 <需求ID> 2026-07-21 5
+```bash
+bash scripts/tapd.sh schedule 30139507 <需求ID> 2026-07-21 5
 ```
-
-- 任务顺序执行不重叠；日期含周末但只算工作日
-- 1 天 = 8 小时
 
 ### 5. 整体移期
 
-```powershell
-.\scripts\tapd.ps1 move 30139507 3 <需求ID1> <需求ID2> ...
+```bash
+bash scripts/tapd.sh move 30139507 3 <需求ID1> <需求ID2> ...
 ```
-
-- 每个需求从原开始日期 + 移动天数
-- 落在周末则顺延到周一
-- 结束日期按工作日数从新开始日期反推
 
 ### 6. 直接调 MCP
 
-```powershell
-.\scripts\tapd.ps1 call tapd-cn-mcp.get_stories_or_tasks workspace_id=30139507 options.entity_type=story
+```bash
+bash scripts/tapd.sh call tapd-cn-mcp.get_stories_or_tasks workspace_id=30139507 options.entity_type=story
 ```
 
 ---
@@ -490,52 +442,3 @@ mcporter --config <skill>/config/mcporter.json call tapd-cn-mcp.<工具名> [key
 14. **TAPD REST API 替代方案**：`tapd_common.py` 中提供了 `get_stories_by_api()` 函数，直接用 TAPD REST API（`https://api.tapd.cn/stories`）查询，可获取全部数据。Token 自动从 `config/mcporter.json` 中提取
 15. **macOS/Linux 脚本权限**：`scripts/tapd.sh` 首次使用前需 `chmod +x scripts/tapd.sh`
 16. **macOS/Linux Python 命令**：使用 `python3` 而非 `python`，`pip3` 而非 `pip`
-
----
-
-## AI 加载后可用工具速查
-
-### Windows PowerShell
-```powershell
-# 查今日待办
-python <skill>\scripts\todo_query.py
-.\scripts\tapd.ps1 todo
-
-# 查花费
-.\scripts\tapd.ps1 timesheet
-.\scripts\tapd.ps1 timesheet 2026-07-20
-
-# 记工时
-.\scripts\tapd.ps1 hours 30139507 <ID> 4
-
-# 排期
-.\scripts\tapd.ps1 schedule 30139507 <ID> 2026-07-21 5
-
-# 移期
-.\scripts\tapd.ps1 move 30139507 3 <ID1> <ID2>
-
-# MCP 直接调用
-mcporter --config <skill>\config\mcporter.json call tapd-cn-mcp.get_todo workspace_id=30139507 entity_type=story
-```
-
-### macOS / Linux Bash
-```bash
-# 查今日待办
-python3 <skill>/scripts/todo_query.py
-bash scripts/tapd.sh todo
-
-# 查花费
-bash scripts/tapd.sh timesheet
-
-# 记工时
-bash scripts/tapd.sh hours 30139507 <ID> 4
-
-# 排期
-bash scripts/tapd.sh schedule 30139507 <ID> 2026-07-21 5
-
-# 移期
-bash scripts/tapd.sh move 30139507 3 <ID1> <ID2>
-
-# MCP 直接调用
-mcporter --config <skill>/config/mcporter.json call tapd-cn-mcp.get_todo workspace_id=30139507 entity_type=story
-```

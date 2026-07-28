@@ -1,14 +1,14 @@
 """
-TAPD 排期工具
-为需求设置排期（begin / due / effort），自动计算工作日和工时。
+TAPD 排期
+为需求设置排期（begin / due / effort），自动计算工作日和工时
 
-用法:
-  python scripts/schedule.py <项目ID> <需求ID> <开始日期> <工作日数>
-  python scripts/schedule.py <项目ID> <需求ID> <开始日期> <结束日期>
+用法：
+  python3 scripts/schedule.py <项目ID> <需求ID> <开始日期> <工作日数>
+  python3 scripts/schedule.py <项目ID> <需求ID> <开始日期> <结束日期>
 
-示例:
-  python scripts/schedule.py 30139507 1130139507001006273 2026-07-21 5
-  python scripts/schedule.py 30139507 1130139507001006273 2026-07-21 2026-07-25
+示例：
+  python3 scripts/schedule.py 30139507 1130139507001006273 2026-07-21 5
+  python3 scripts/schedule.py 30139507 1130139507001006273 2026-07-21 2026-07-25
 """
 import sys, json
 from datetime import date
@@ -24,7 +24,7 @@ def main():
     entity_id = sys.argv[2]
     begin_str = sys.argv[3]
 
-    # 判断第4个参数是工作日数还是结束日期
+    # 判断第四个参数是工作日数还是结束日期
     if len(sys.argv) >= 5:
         arg4 = sys.argv[4]
         if "-" in arg4:
@@ -42,7 +42,7 @@ def main():
         sys.exit(1)
 
     effort = workdays * 8
-    print(f"=== 设置排期 ===\n需求ID: {entity_id}\n开始: {begin_str}\n结束: {due_str}")
+    print(f"=== 排期设置 ===\n需求ID: {entity_id}\n开始: {begin_str}\n结束: {due_str}")
     print(f"工作日: {workdays} 天 = {effort}h\n")
 
     # 调用 update
@@ -55,9 +55,9 @@ def main():
     items = parse_result(raw)
     if items:
         s = items[0].get("Story", items[0])
-        print(f"✅ 排期已更新: {s.get('begin', begin_str)} ~ {s.get('due', due_str)}, 工时 {s.get('effort', effort)}h")
+        print(f"✓ 排期已更新: {s.get('begin', begin_str)} ~ {s.get('due', due_str)}, 工时 {s.get('effort', effort)}h")
     else:
-        print("✅ 排期已更新")
+        print("✓ 排期已更新")
         print(f"  {begin_str} ~ {due_str}  |  {workdays} 工作日  |  {effort}h")
 
 
