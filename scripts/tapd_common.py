@@ -1,22 +1,13 @@
-"""TAPD 通用模块 — mcporter 调用、配置加载、工作日工具
+"""TAPD 通用模块 — REST API 为主，mcporter 仅用于 story/task 写入操作
 所有 scripts/*.py 都从这里导入配置和公共函数。
 """
-import subprocess, json, sys, os, shutil
+import json, sys, os, shutil, subprocess, urllib.parse
 from datetime import date, timedelta
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import requests
 
 SKILL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# ----- mcporter 查找 -----
-_mcporter = shutil.which("mcporter") or shutil.which("mcporter.cmd")
-if not _mcporter:
-    print("[错误] 找不到 mcporter，请先执行 npm install -g mcporter")
-    sys.exit(1)
-
-MCPORTER = [_mcporter, "--config",
-            os.path.join(SKILL_DIR, "config", "mcporter.json"), "call"]
-
-# ----- Token 获取（用于直接调用 TAPD REST API） -----
+# ----- Token 获取 -----
 def _get_token():
     """从 mcporter.json 提取 TAPD Access Token"""
     mcp_path = os.path.join(SKILL_DIR, "config", "mcporter.json")
@@ -27,6 +18,37 @@ def _get_token():
         for i, a in enumerate(args):
             if a == "--access-token" and i + 1 < len(args):
                 return args[i + 1]
+    except Exception:
+        pass
+    return None
+
+_TAPD_TOKEN = _get_token()
+_TAPD_BASE = "https://api.tapd.cn"
+
+# ----- REST API 通用请求 -----
+def _api_get(endpoint, params=None):
+    """GET 请求 TAPD REST API，返回 data 列表"""
+    if not _TAPD_TOKEN:
+        return None
+    try:
+        r = requests.get(f"{_TAPD_BASE}/{endpoint}", params=params,
+                         headers={"Authorization": f"Bearer {_TAPD_TOKEN}"}, timeout=15)
+        if r.status_code == 200:
+            return r.json().get("data", [])
+    except Exception:
+        pass
+    return None
+
+def _api_post(endpoint, data):
+    """POST 请求 TAPD REST API，返回 data 字典"""
+    if not _TAPD_TOKEN:
+        return None
+    try:
+        r = requests.post(f"{_TAPD_BASE}/{endpoint}",
+                          data=data,
+                          headers={"Authorization": f"Bearer {_TAPD_TOKEN}"}, timeout=15)
+        if r.status_code == 200:
+            return r.json().get("data")
     except Exception:
         pass
     return None
@@ -43,31 +65,122 @@ except Exception:
     sys.exit(1)
 
 
-def run_mcporter(selector, options=None, **params):
-    """调用 mcporter MCP 工具，返回解析后的 dict
-    - params: 顶级参数，如 workspace_id=30139507
-    - options: 可以是 dict（展开为 options.key=value）或 str（直接传递 options=<str>）
+# ===== Timesheet API =====
+
+def get_timesheets_by_api(pid, owner, spentdate=None, entity_id=None):
+    """查工时，返回 Timesheet 列表"""
+    params = {"workspace_id": pid, "owner": owner, "limit": 200}
+    if spentdate:
+        params["spentdate"] = spentdate
+    if entity_id:
+        params["entity_id"] = entity_id
+    params["fields"] = "id,entity_id,entity_type,timespent,spentdate,memo,owner,workspace_id"
+    data = _api_get("timesheets", params)
+    if data is None:
+        return []
+    return [item.get("Timesheet", item) for item in data]
+
+
+def add_timesheet_by_api(pid, entity_type, entity_id, timespent, owner, spentdate, memo=""):
+    """添加工时记录"""
+    data = _api_post("timesheets", {
+        "workspace_id": pid,
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "timespent": str(timespent),
+        "owner": owner,
+        "spentdate": spentdate,
+        "memo": memo,
+    })
+    if data:
+        return data.get("Timesheet", {})
+    return None
+
+
+def update_timesheet_by_api(ts_id, timespent, memo=""):
+    """更新工时记录"""
+    data = _api_post("timesheets", {
+        "id": ts_id,
+        "timespent": str(timespent),
+        "memo": memo,
+    })
+    if data:
+        return data.get("Timesheet", {})
+    return None
+
+
+# ===== Story/Task API (REST 只读) =====
+
+def get_stories_by_api(pid, entity_type="story", fields=None):
     """
+    直调 TAPD REST API 查询 story/task 列表。
+    返回 { id: detail_dict } 格式。
+    """
+    if entity_type == "story":
+        endpoint = "stories"
+        type_key = "Story"
+    else:
+        endpoint = "tasks"
+        type_key = "Task"
+    params = {"workspace_id": pid, "limit": 200}
+    if fields:
+        params["fields"] = fields
+    data = _api_get(endpoint, params)
+    if not data:
+        return {}
+    result = {}
+    for item in data:
+        s = item.get(type_key, {})
+        result[s.get("id", "")] = s
+    return result
+
+
+# ===== mcporter — 仅用于 story/task 写入操作（REST API 无对应权限） =====
+
+def _get_mcporter():
+    """懒查找 mcporter 路径"""
+    mcporter = shutil.which("mcporter") or shutil.which("mcporter.cmd")
+    if not mcporter:
+        print("[错误] 找不到 mcporter，story/task 写入操作将不可用")
+        print("请执行 npm install -g mcporter 安装")
+        return None
+    return mcporter
+
+_MCPORTER = None  # lazy init
+
+def run_mcporter(selector, options=None, **params):
+    """
+    调用 mcporter MCP 工具（仅用于 story/task 写入）。
+    params: 顶级参数如 workspace_id=30139507
+    options: dict → 展开为 options.key=value
+    """
+    global _MCPORTER
+    if _MCPORTER is None:
+        mp = _get_mcporter()
+        if not mp:
+            return None
+        _MCPORTER = [mp, "--config",
+                     os.path.join(SKILL_DIR, "config", "mcporter.json"), "call"]
     args = [f"{k}={v}" for k, v in params.items()]
     if isinstance(options, dict):
         args += [f"options.{k}={v}" for k, v in options.items()]
     elif isinstance(options, str):
         args += [f"options={options}"]
-    cmd = MCPORTER + [selector] + args
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-    if r.returncode != 0:
-        return None
+    cmd = _MCPORTER + [selector] + args
     try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        if r.returncode != 0:
+            return None
         return json.loads(r.stdout)
-    except json.JSONDecodeError:
+    except Exception:
         return None
 
 
 def parse_result(raw):
     """
-    解析返回结果：
-    - dict 带 result(key) → 内部 JSON 字符串的 data（get_stories_or_tasks 等）
-    - dict 带 data(key) → 直接返回数组（get_todo 等）
+    解析 mcporter 返回结果：
+    - dict 带 result(key) → 内部 JSON 字符串的 data
+    - dict 带 data(key) → 直接返回数组
     """
     if raw is None or not isinstance(raw, dict):
         return []
@@ -80,10 +193,12 @@ def parse_result(raw):
     return raw.get("data", [])
 
 
+# ===== 并行遍历工具 =====
+
 def for_all_projects(entity_types, fn):
     """遍历所有项目并行执行 fn(pid, entity_type)，返回 { pid: { entity_type: [items] } }"""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     results = {}
-    # N1 为双核设备，限制并发以避免大量 mcporter 子进程争抢 CPU 和内存。
     with ThreadPoolExecutor(max_workers=8) as ex:
         futures = {}
         for p in PROJECTS:
@@ -101,7 +216,8 @@ def for_all_projects(entity_types, fn):
     return results
 
 
-# ----- 工作日工具 -----
+# ===== 工作日工具 =====
+
 def working_days(start, end):
     """计算 start~end 之间的工作日数（不含周末）"""
     return sum(1 for i in range((end - start).days + 1)
@@ -122,49 +238,3 @@ def next_workday(d):
     while d.weekday() >= 5:
         d += timedelta(days=1)
     return d
-
-
-# ----- TAPD REST API 直连（绕过 MCP Server 的 limit bug） -----
-_TAPD_TOKEN = _get_token()
-
-def get_stories_by_api(pid, entity_type="story", fields=None):
-    """
-    直接调用 TAPD REST API 查询功能/任务列表。
-    MCP Server 的 get_stories_or_tasks 的 limit/page 都不生效的 bug，
-    这里是替代方案。
-    返回 { id: detail_dict } 格式。
-    """
-    if not _TAPD_TOKEN:
-        # fallback 走 mcporter
-        raw = run_mcporter("tapd-cn-mcp.get_stories_or_tasks",
-                           options={"entity_type": entity_type,
-                                    "fields": fields or "id,name,begin,due,owner,effort,priority_label,developer"})
-        items = parse_result(raw)
-        result = {}
-        for item in items:
-            key = entity_type.capitalize()
-            s = item.get(key, {})
-            result[s.get("id", "")] = s
-        return result
-
-    import requests
-    ep = "stories" if entity_type == "story" else "tasks"
-    params = {"workspace_id": pid, "limit": 200}
-    if fields:
-        params["fields"] = fields
-    try:
-        r = requests.get(f"https://api.tapd.cn/{ep}",
-                         params=params,
-                         headers={"Authorization": f"Bearer {_TAPD_TOKEN}"},
-                         timeout=15)
-        if r.status_code == 200:
-            data = r.json().get("data", [])
-            result = {}
-            for item in data:
-                key = entity_type.capitalize()
-                s = item.get(key, {})
-                result[s.get("id", "")] = s
-            return result
-    except Exception:
-        pass
-    return {}

@@ -1,6 +1,6 @@
 """
-TAPD 记工时
-注意：同一天同一需求是否已有记录（有则 update），父需求不可记工时，API 422
+TAPD 记工时（REST API 版）
+注意：同一天同一需求是否已有记录（有则 update），父需求不可记工时
 
 用法：
   python3 scripts/add_hours.py <项目ID> <需求ID> <时数> [日期] [备注]
@@ -9,9 +9,13 @@ TAPD 记工时
   python3 scripts/add_hours.py 30139507 1130139507001006273 4
   python3 scripts/add_hours.py 30139507 1130139507001006273 8 2026-07-20 "对接测试"
 """
-import sys, json
+import sys
 from datetime import date
-from tapd_common import run_mcporter, parse_result, PROJECTS, USER_NICK
+from tapd_common import (
+    PROJECTS, USER_NICK,
+    get_timesheets_by_api, add_timesheet_by_api, update_timesheet_by_api,
+    get_stories_by_api
+)
 
 
 def get_project_name(pid):
@@ -21,17 +25,12 @@ def get_project_name(pid):
     return pid
 
 
-def check_existing(pid, entity_id, entity_type, spentdate):
-    """查询是否已有工时记录"""
-    raw = run_mcporter("tapd-cn-mcp.get_timesheets", workspace_id=pid,
-                       options=json.dumps({"owner": USER_NICK, "spentdate": spentdate, "entity_id": entity_id,
-                                           "entity_type": entity_type, "limit": "10"}))
-    items = parse_result(raw)
-    if isinstance(items, list):
-        for item in items:
-            ts = item.get("Timesheet", item)
-            if ts.get("entity_id") == entity_id and ts.get("spentdate") == spentdate:
-                return ts.get("id")
+def check_existing(pid, entity_id, spentdate):
+    """查询是否已有工时记录，有则返回 timesheet id"""
+    items = get_timesheets_by_api(pid, USER_NICK, spentdate=spentdate, entity_id=entity_id)
+    for ts in items:
+        if ts.get("entity_id") == entity_id and ts.get("spentdate") == spentdate:
+            return ts.get("id")
     return None
 
 
@@ -57,12 +56,9 @@ def main():
     print(f"=== 记工时 ===\n项目: {pname} ({pid})\n需求ID: {entity_id}\n工时: {timespent}h\n日期: {spentdate}\n")
 
     # 1. 检测父需求
-    raw = run_mcporter("tapd-cn-mcp.get_stories_or_tasks", workspace_id=pid,
-                       options={"entity_type": "story", "id": entity_id,
-                                "fields": "id,name,parent_id,children_id"})
-    items = parse_result(raw)
-    if items:
-        s = items[0].get("Story", {})
+    stories = get_stories_by_api(pid, "story", fields="id,name,parent_id,children_id")
+    s = stories.get(entity_id)
+    if s:
         children = s.get("children_id", "")
         if children and children.strip("|"):
             print(f"[警告] 该需求下有子需求，父需求不可记工时！")
@@ -73,21 +69,17 @@ def main():
                 sys.exit(0)
 
     # 2. 检测是否已有记录
-    existing_id = check_existing(pid, entity_id, "story", spentdate)
+    existing_id = check_existing(pid, entity_id, spentdate)
     if existing_id:
         print(f"[更新] 已有工时记录 (ID: {existing_id})，更新为 {timespent}h")
-        raw = run_mcporter("tapd-cn-mcp.update_timesheets", workspace_id=pid,
-                           options=json.dumps({"id": existing_id, "timespent": timespent, "memo": memo}))
-        if raw:
+        result = update_timesheet_by_api(existing_id, timespent, memo)
+        if result:
             print("✓ 工时已更新")
         else:
             print("✘ 更新失败")
     else:
-        raw = run_mcporter("tapd-cn-mcp.add_timesheets", workspace_id=pid,
-                           options=json.dumps({"entity_type": "story", "entity_id": entity_id,
-                                               "timespent": timespent, "owner": USER_NICK,
-                                               "spentdate": spentdate, "memo": memo}))
-        if raw:
+        result = add_timesheet_by_api(pid, "story", entity_id, timespent, USER_NICK, spentdate, memo)
+        if result:
             print("✓ 工时已记录")
         else:
             print("✘ 记录失败（可能原因是父需求不可记工时）")

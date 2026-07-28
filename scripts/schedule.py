@@ -1,6 +1,7 @@
 """
-TAPD 排期
+TAPD 排期（REST API 读 + mcporter 写）
 为需求设置排期（begin / due / effort），自动计算工作日和工时
+story/task 更新走 mcporter（REST API 无写入权限）
 
 用法：
   python3 scripts/schedule.py <项目ID> <需求ID> <开始日期> <工作日数>
@@ -10,7 +11,7 @@ TAPD 排期
   python3 scripts/schedule.py 30139507 1130139507001006273 2026-07-21 5
   python3 scripts/schedule.py 30139507 1130139507001006273 2026-07-21 2026-07-25
 """
-import sys, json
+import sys
 from datetime import date
 from tapd_common import run_mcporter, parse_result, working_days, find_end_date, next_workday
 
@@ -45,13 +46,15 @@ def main():
     print(f"=== 排期设置 ===\n需求ID: {entity_id}\n开始: {begin_str}\n结束: {due_str}")
     print(f"工作日: {workdays} 天 = {effort}h\n")
 
-    # 调用 update
+    # 走 mcporter（REST API 无 story/task 写入权限）
     raw = run_mcporter("tapd-cn-mcp.update_story_or_task", workspace_id=pid,
                        options={"entity_type": "story", "id": entity_id,
                                 "begin": begin_str, "due": due_str,
                                 "effort": str(effort)})
+    if raw is None:
+        print("✘ 更新失败（mcporter 不可用）")
+        sys.exit(1)
 
-    # 解析结果
     items = parse_result(raw)
     if items:
         s = items[0].get("Story", items[0])

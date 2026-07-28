@@ -6,13 +6,12 @@
 #   bash scripts/tapd.sh timesheet [日期]                # 查花费
 #   bash scripts/tapd.sh schedule <项目ID> <需求ID> <日期> <工作日> # 排期
 #   bash scripts/tapd.sh move <项目ID> <天数> <需求ID...>  # 移期
-#   bash scripts/tapd.sh call <工具名> [参数]            # 调用 MCP 工具
+#   bash scripts/tapd.sh call <工具名> [参数]            # 直接调用 MCP 工具
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_DIR="$(dirname "$SCRIPT_DIR")"
-CONFIG_PATH="$SKILL_DIR/config/mcporter.json"
 
 cmd="${1:-help}"
 shift || true
@@ -34,6 +33,11 @@ case "$cmd" in
     python3 "$SCRIPT_DIR/reschedule.py" "$@"
     ;;
   call|list)
+    CONFIG_PATH="$SKILL_DIR/config/mcporter.json"
+    if ! command -v mcporter &>/dev/null; then
+      echo "[错误] 找不到 mcporter，请执行 npm install -g mcporter"
+      exit 1
+    fi
     mcporter --config "$CONFIG_PATH" "$cmd" "$@"
     ;;
   help|"")
@@ -45,8 +49,8 @@ case "$cmd" in
     echo "  hours <项目ID> <需求ID> <时数>  记工时"
     echo "  schedule <项目ID> <需求ID> <日期> <工作日>  排期"
     echo "  move <项目ID> <天数> <需求ID...>  整体移期"
-    echo "  call <工具名> [参数]           调用 MCP 工具"
-    echo "  list                        列出可用 MCP 工具"
+    echo "  call <工具名> [参数]           调用 MCP 工具（需安装 mcporter）"
+    echo "  list                        列出可用 MCP 工具（需安装 mcporter）"
     echo ""
     echo "示例:"
     echo "  $0 todo"
@@ -56,6 +60,13 @@ case "$cmd" in
     echo "  $0 call tapd-cn-mcp.get_todo workspace_id=30139507 entity_type=story"
     ;;
   *)
-    mcporter --config "$CONFIG_PATH" call "tapd-cn-mcp.$cmd" "$@"
+    # 未知命令尝试走 mcporter（兼容旧用法）
+    CONFIG_PATH="$SKILL_DIR/config/mcporter.json"
+    if command -v mcporter &>/dev/null; then
+      mcporter --config "$CONFIG_PATH" call "tapd-cn-mcp.$cmd" "$@"
+    else
+      echo "未知命令: $cmd"
+      exit 1
+    fi
     ;;
 esac
