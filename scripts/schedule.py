@@ -1,7 +1,6 @@
 """
-TAPD 排期（REST API 读 + mcporter 写）
+TAPD 排期（全 REST API）
 为需求设置排期（begin / due / effort），自动计算工作日和工时
-story/task 更新走 mcporter（REST API 无写入权限）
 
 用法：
   python3 scripts/schedule.py <项目ID> <需求ID> <开始日期> <工作日数>
@@ -13,7 +12,7 @@ story/task 更新走 mcporter（REST API 无写入权限）
 """
 import sys
 from datetime import date
-from tapd_common import run_mcporter, parse_result, working_days, find_end_date, next_workday
+from tapd_common import working_days, find_end_date, next_workday, update_story_by_api
 
 
 def main():
@@ -46,22 +45,13 @@ def main():
     print(f"=== 排期设置 ===\n需求ID: {entity_id}\n开始: {begin_str}\n结束: {due_str}")
     print(f"工作日: {workdays} 天 = {effort}h\n")
 
-    # 走 mcporter（REST API 无 story/task 写入权限）
-    raw = run_mcporter("tapd-cn-mcp.update_story_or_task", workspace_id=pid,
-                       options={"entity_type": "story", "id": entity_id,
-                                "begin": begin_str, "due": due_str,
-                                "effort": str(effort)})
-    if raw is None:
-        print("✘ 更新失败（mcporter 不可用）")
-        sys.exit(1)
-
-    items = parse_result(raw)
-    if items:
-        s = items[0].get("Story", items[0])
-        print(f"✓ 排期已更新: {s.get('begin', begin_str)} ~ {s.get('due', due_str)}, 工时 {s.get('effort', effort)}h")
+    result = update_story_by_api(pid, "story", entity_id,
+                                  begin=begin_str, due=due_str, effort=str(effort))
+    if result:
+        print(f"✓ 排期已更新: {result.get('begin', begin_str)} ~ {result.get('due', due_str)}, "
+              f"工时 {result.get('effort', effort)}h")
     else:
-        print("✓ 排期已更新")
-        print(f"  {begin_str} ~ {due_str}  |  {workdays} 工作日  |  {effort}h")
+        print("✘ 更新失败（REST API 返回异常）")
 
 
 if __name__ == "__main__":

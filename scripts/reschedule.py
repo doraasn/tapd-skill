@@ -1,7 +1,6 @@
 """
-TAPD 整体移期（REST API 读 + mcporter 写）
+TAPD 整体移期（全 REST API）
 批量后移多个需求的排期 N 天，周末自动顺延
-story/task 更新走 mcporter（REST API 无写入权限）
 
 用法：
   python3 scripts/reschedule.py <项目ID> <天数> <需求ID1> [需求ID2 ...]
@@ -11,7 +10,7 @@ story/task 更新走 mcporter（REST API 无写入权限）
 """
 import sys
 from datetime import date, timedelta
-from tapd_common import run_mcporter, parse_result, get_stories_by_api, working_days, find_end_date, next_workday
+from tapd_common import get_stories_by_api, update_story_by_api, working_days, find_end_date, next_workday
 
 
 def main():
@@ -48,13 +47,11 @@ def main():
         new_due = find_end_date(new_begin, old_workdays)
         new_effort = working_days(new_begin, new_due) * 8
 
-        # 走 mcporter 更新（REST API 无 story 写入权限）
-        raw = run_mcporter("tapd-cn-mcp.update_story_or_task", workspace_id=pid,
-                           options={"entity_type": "story", "id": s["id"],
-                                    "begin": new_begin.isoformat(),
-                                    "due": new_due.isoformat(),
-                                    "effort": str(new_effort)})
-        if raw:
+        ret = update_story_by_api(pid, "story", s["id"],
+                                   begin=new_begin.isoformat(),
+                                   due=new_due.isoformat(),
+                                   effort=str(new_effort))
+        if ret:
             results.append({
                 "name": s["name"], "id": sid[-8:],
                 "old": f"{s['begin']} ~ {s['due']}",
