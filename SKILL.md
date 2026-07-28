@@ -392,8 +392,9 @@ bash scripts/tapd.sh call tapd-cn-mcp.get_stories_or_tasks workspace_id=30139507
 
 ### 待办
 ```
-| 项目 | ID | 需求 | 处理人 | 优先级 | 排期 | 预估工时 |
+| ID | 需求 | 负责人 | 优先级 | 状态 | 排期 | 预估工时 |
 ```
+- 必须包含**负责人**列，展示给用户时不可省略
 - High 标粗；排期为空显示 "-"；按项目分组
 
 ### 花费
@@ -442,3 +443,4 @@ bash scripts/tapd.sh call tapd-cn-mcp.get_stories_or_tasks workspace_id=30139507
 14. **TAPD REST API 替代方案**：`tapd_common.py` 中提供了 `get_stories_by_api()` 函数，直接用 TAPD REST API（`https://api.tapd.cn/stories`）查询，可获取全部数据。Token 自动从 `config/mcporter.json` 中提取
 15. **macOS/Linux 脚本权限**：`scripts/tapd.sh` 首次使用前需 `chmod +x scripts/tapd.sh`
 16. **macOS/Linux Python 命令**：使用 `python3` 而非 `python`，`pip3` 而非 `pip`
+17. **待办表格必须包含"负责人"列**：展示给用户时，表格必须包含 ID、需求、负责人、优先级、状态、排期、工时 7 列。任何时候都不可省略"负责人"列，否则用户无法判断谁负责哪条需求
