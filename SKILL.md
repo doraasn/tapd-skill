@@ -1,13 +1,13 @@
 ---
 name: tapd-skill
-description: 通过 mcporter + MCP Server 连接 TAPD，管理需求/任务/缺陷/工时/迭代/排期。当用户需要查询、修改 TAPD 项目中需求、缺陷、任务、迭代等信息时使用。
+description: 通过 TAPD REST API（为主）+ mcporter（仅排期/移期写入）连接 TAPD，管理需求/任务/缺陷/工时/迭代/排期。当用户需要查询、修改 TAPD 项目中需求、缺陷、任务、迭代等信息时使用。
 allowed-tools:
 disable: false
 ---
 
 # TAPD 接入与操作 Skill
 
-通过 mcporter + MCP Server 连接 TAPD，管理需求/任务/缺陷/工时/迭代/排期。
+通过 TAPD REST API（读取/工时操作）+ mcporter（仅排期/移期写入）连接 TAPD，管理需求/任务/缺陷/工时/迭代/排期。
 
 Skill 涉及的角色：
 - **研发**：查待办、记工时、排期、缺陷跟进
@@ -21,16 +21,13 @@ Skill 涉及的角色：
 
 AI 加载本 Skill 后，按以下步骤做初始化检查：
 
-### Step 1 — 检查并安装环境依赖
+### Step 1 — 检查环境依赖
 
-首先检测操作系统（`sys.platform`），然后按平台执行安装检查：
-
-**检查顺序：若某工具未安装，则执行安装命令后再继续。**
-
-| 工具 | 检查命令 | 安装命令 |
-|------|----------|----------|
-| mcporter | `mcporter --help` | `npm install -g mcporter` |
-| mcp-server-tapd | `mcp-server-tapd --help` 或 `python -m pip show mcp-server-tapd` | `python -m pip install mcp-server-tapd` |
+| 工具 | 用途 | 检查命令 | 安装命令 |
+|------|------|----------|----------|
+| Python requests | REST API 请求（查询/工时等主要操作） | `python3 -c "import requests"` | `pip3 install requests` |
+| mcporter | **可选**，仅排期/移期写入需要 | `mcporter --help` | `npm install -g mcporter` |
+| mcp-server-tapd | **可选**，mcporter 配套 | `mcp-server-tapd --help` | `pip3 install mcp-server-tapd`
 
 **查找 mcp-server-tapd 的安装路径（用于后续写入 config）：**
 
@@ -165,34 +162,28 @@ tapd/                          # skill 根目录
 
 ## 前提安装
 
-| 工具 | Windows | macOS / Linux | 验证 |
-|------|---------|---------------|------|
-| Node.js | `node --version` | `node --version` | ≥ v18 |
-| mcporter | `npm install -g mcporter` | `npm install -g mcporter` | `mcporter --help` |
-| Python | `python --version` | `python3 --version` | ≥ v3.10 |
-| pip | `python -m pip --version` | `python3 -m pip --version` | — |
-| mcp-server-tapd | `python -m pip install mcp-server-tapd` | `python3 -m pip install mcp-server-tapd` | `mcp-server-tapd --help` |
+| 工具 | Windows | macOS / Linux | 验证 | 必要性 |
+|------|---------|---------------|------|--------|
+| Python | `python --version` | `python3 --version` | ≥ v3.10 | **必需** |
+| requests | `python -m pip install requests` | `python3 -m pip install requests` | `python3 -c "import requests"` | **必需** |
+| Node.js | `node --version` | `node --version` | ≥ v18 | 可选（仅排期/移期需要） |
+| mcporter | `npm install -g mcporter` | `npm install -g mcporter` | `mcporter --help` | 可选（仅排期/移期需要） |
+| mcp-server-tapd | `python -m pip install mcp-server-tapd` | `python3 -m pip install mcp-server-tapd` | `mcp-server-tapd --help` | 可选（仅排期/移期需要） |
 
 ---
 
 ## 连接方式
 
-### MCP 配置
+### REST API（主要方式）
 
-MCP Server 定义在 `config/mcporter.json`。
+所有读取操作和工时操作均通过 TAPD REST API 直连：
+- Token 从 `config/mcporter.json` 提取
+- 支持 endpoints: `/stories`, `/tasks`, `/bugs`, `/timesheets`
+- 响应极快（~0.4s/请求），且不限制返回条数
 
-**Linux 示例：**
-```json
-{
-  "mcpServers": {
-    "tapd-cn-mcp": {
-      "command": "/usr/local/bin/mcp-server-tapd",
-      "args": ["--access-token", "<TOKEN>", "--mode", "stdio"],
-      "env": {}
-    }
-  }
-}
-```
+### mcporter（仅排期/移期写入）
+
+TAPD REST API 对 story/task 写入返回 403（Token 权限限制），排期和移期操作通过 mcporter 完成。
 
 **调用方式：**
 ```
@@ -216,7 +207,20 @@ mcporter --config <skill>/config/mcporter.json call tapd-cn-mcp.<工具名> [key
 
 ---
 
-## MCP 工具参考
+## REST API 参考（主要使用）
+
+| 操作 | REST 端点 | 脚本 |
+|------|-----------|------|
+| 查待办 | `GET /stories?owner=俞金涛` | `todo_query.py` |
+| 查工时 | `GET /timesheets?owner=俞金涛&spentdate=` | `timesheet_query.py` |
+| 记工时 | `POST /timesheets` | `add_hours.py` |
+| 查需求详情 | `GET /stories?workspace_id=X&fields=...` | （`get_stories_by_api()`） |
+
+## mcporter 参考（仅排期/移期）
+
+| 工具 | 用途 | 脚本 |
+|------|------|------|
+| `update_story_or_task` | 更新需求排期/工时 | `schedule.py`, `reschedule.py` |
 
 ### 项目
 
@@ -444,3 +448,5 @@ bash scripts/tapd.sh call tapd-cn-mcp.get_stories_or_tasks workspace_id=30139507
 15. **macOS/Linux 脚本权限**：`scripts/tapd.sh` 首次使用前需 `chmod +x scripts/tapd.sh`
 16. **macOS/Linux Python 命令**：使用 `python3` 而非 `python`，`pip3` 而非 `pip`
 17. **待办表格必须包含"负责人"列**：展示给用户时，表格必须包含 ID、需求、负责人、优先级、状态、排期、工时 7 列。任何时候都不可省略"负责人"列，否则用户无法判断谁负责哪条需求
+18. **REST API > mcporter**：查询和工时操作全部使用 TAPD REST API（`https://api.tapd.cn/*`），速度比 mcporter 快约 30 倍（0.4s vs 12s）。mcporter 仅保留给 story/task 更新（REST API 返回 403）
+19. **story/task 更新 REST API 403**：TAPD Personal Access Token 没有 `stories::update` 权限，因此 `POST /stories/update` 返回 403。此类操作必须走 mcporter（schedule.py、reschedule.py）
