@@ -6,7 +6,7 @@ TAPD 今日待办查询
 使用单个有限线程池查询各项目的 3 种实体类型（story/bug/task），按 owner 筛选。
 REST API 返回 ~0.4s/次，对比 mcporter ~12s/次，提速约 30 倍。
 """
-import sys, os, json
+import sys, os, json, threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -39,6 +39,8 @@ CLOSED_STORY_STATUSES = {"closed", "resolved", "rejected", "status_20"}  # statu
 CLOSED_BUG_STATUSES = {"closed"}
 
 # ----- 状态码映射 -----
+# 各项目的状态码含义不同，优先用 get_status_map() 动态获取的项目专属映射，
+# 这里仅作为兜底（未知项目/接口失败时使用）。
 STATUS_LABELS = {
     "planning": "规划中",
     "developing": "开发中",
@@ -54,6 +56,57 @@ STATUS_LABELS = {
     "confirmed": "已确认",
     "rejected": "已拒绝",
 }
+
+# ----- 项目状态映射（动态获取 + 内存缓存） -----
+_STATUS_MAP_CACHE: dict[str, dict[str, str]] = {}
+_STATUS_MAP_LOCK = threading.Lock()
+
+
+def get_status_map(pid):
+    """获取项目的 story 状态映射 {status_code: chinese_name}，内存缓存避免重复请求"""
+    if pid in _STATUS_MAP_CACHE:
+        return _STATUS_MAP_CACHE[pid]
+    with _STATUS_MAP_LOCK:
+        if pid in _STATUS_MAP_CACHE:
+            return _STATUS_MAP_CACHE[pid]
+        mapping = {}
+        query = urlencode({"workspace_id": pid, "system": "story"})
+        url = f"https://api.tapd.cn/workflows/status_map?{query}"
+        req = Request(url, headers={
+            "Authorization": f"Bearer {TOKEN}",
+            "User-Agent": "tapd-skill/1.0",
+        })
+        try:
+            with urlopen(req, timeout=15) as resp:
+                body = json.loads(resp.read())
+            data = body.get("data", {})
+            # data 直接是 {status_code: chinese_name} 字典；兼容个别版本返回列表的情况
+            if isinstance(data, dict):
+                mapping = dict(data)
+            elif isinstance(data, list):
+                for item in data:
+                    if isinstance(item, dict) and "WorkflowStatus" in item:
+                        ws = item["WorkflowStatus"]
+                        mapping[ws.get("status", "")] = ws.get("chinese_name", "")
+        except Exception:
+            pass
+        _STATUS_MAP_CACHE[pid] = mapping
+        return mapping
+
+
+def translate_status(pid, status):
+    """状态码转中文：优先项目专属映射，其次全局兜底，最后原样返回"""
+    return get_status_map(pid).get(status) or STATUS_LABELS.get(status) or status
+
+
+# 终态关键词：命中即视为已完成/已关闭，不展示（"验收中"不属于终态）
+_TERMINAL_KEYWORDS = ("已验收", "已拒绝", "已关闭", "已实现")
+
+
+def is_terminal_status(pid, status):
+    """基于项目专属映射判断是否为终态（已验收/已拒绝/已关闭/已实现）"""
+    name = translate_status(pid, status)
+    return any(kw in name for kw in _TERMINAL_KEYWORDS)
 
 
 def query_entity_type(pid, entity_type):
@@ -105,15 +158,12 @@ def query_entity_type(pid, entity_type):
     for raw in items:
         obj = raw.get(type_key, {})
         status = obj.get("status", "")
-        # 跳过已关闭/已结束的
+        # 跳过已关闭/已结束/已验收的
         if entity_type == "bug":
             if status in CLOSED_BUG_STATUSES:
                 continue
-        elif entity_type == "story":
-            if status in CLOSED_STORY_STATUSES:
-                continue
-        elif entity_type == "task":
-            if status in CLOSED_STORY_STATUSES:
+        else:
+            if is_terminal_status(pid, status):
                 continue
 
         if entity_type == "story":
@@ -126,7 +176,7 @@ def query_entity_type(pid, entity_type):
                 "begin": obj.get("begin", "") or "",
                 "due": obj.get("due", "") or "",
                 "effort": obj.get("effort", "") or "",
-                "status": STATUS_LABELS.get(status, status),
+                "status": translate_status(pid, status),
             }
         elif entity_type == "task":
             entry = {
@@ -138,7 +188,7 @@ def query_entity_type(pid, entity_type):
                 "begin": obj.get("begin", "") or "",
                 "due": obj.get("due", "") or "",
                 "effort": obj.get("effort", "") or "",
-                "status": STATUS_LABELS.get(status, status),
+                "status": translate_status(pid, status),
             }
         else:
             entry = {
@@ -150,7 +200,7 @@ def query_entity_type(pid, entity_type):
                 "begin": "",
                 "due": "",
                 "effort": "",
-                "status": STATUS_LABELS.get(status, status),
+                "status": translate_status(pid, status),
             }
         parsed.append(entry)
     return parsed

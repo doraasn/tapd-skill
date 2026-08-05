@@ -127,7 +127,8 @@ bash scripts/tapd.sh move <项目ID> <天数> <需求ID...>
 ```
 - 必须包含**负责人**列，展示给用户时不可省略
 - High 标粗；排期为空显示 "-"；按项目分组
-- **过滤规则：状态为"已拒绝"（rejected）、已验收（resolved/status_20）、已关闭（closed）的条目不展示**
+- **状态显示中文**：每次查询时动态获取各项目的 `workflows/status_map` 映射（内存缓存），状态码转中文，不硬编码
+- **过滤规则：终态（已验收/已拒绝/已关闭/已实现）条目不展示**
 
 ### 花费
 ```
@@ -163,9 +164,10 @@ bash scripts/tapd.sh move <项目ID> <天数> <需求ID...>
 1. **父需求不可记工时**：有子需求的父级 story 调用 `POST /timesheets` 返回 422
 2. **bug 查 developer 无效**：缺陷查询不要用 `developer` 参数，改用 `current_owner`
 3. **effort 是字符串**：TAPD API 返回的 `effort` 字段是字符串而非数字
-4. **查待办不要加状态过滤**：用户要所有未完成的，让脚本自动过滤已关闭/已验收/已拒绝的
+4. **查待办不要加状态过滤**：用户要所有未完成的，让脚本自动过滤终态（已验收/已拒绝/已关闭/已实现）的
 5. **并发查询优先**：用 ThreadPoolExecutor 并行查项目，避免串行超时
 6. **REST API > mcporter**：查询和工时操作全部使用 REST API（`https://api.tapd.cn/*`），速度比 mcporter 快约 30 倍（0.4s vs 12s）
 7. **story/task 更新需要 JSON body + ?s=mcp**：普通 form POST 到 `/stories/update` 返回 403。必须用 JSON body + `?s=mcp` 参数 + `Via: mcp` header，直接 POST 到 `/stories`（不是 `/stories/update`）
 8. **待办表格必须包含"负责人"列**：任何时候都不可省略"负责人"列
+9. **各项目状态码含义不同**：同一 status_18 在芜湖=产品已验收、在其他项目可能是别的含义。不要硬编码状态码映射，每次查询时动态获取各项目 `workflows/status_map` 并缓存（`get_status_map()`），用中文名判断终态（含"已验收/已拒绝/已关闭/已实现"即过滤）
 9. **花费查询格式**：需求名称 + 备注，不要显示单独工时。格式为 `1. 需求名称：花费备注；`
