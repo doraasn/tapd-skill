@@ -35,7 +35,7 @@ TOKEN = _load_token()
 # story: planning, developing, status_7~20 等为活跃状态
 # bug: new, in_progress, resolved 等为活跃状态，closed 为非活跃
 # 注意：REST API 默认不会返回已删除的条目，但可能会返回 closed 的 bug
-CLOSED_STORY_STATUSES = {"closed", "resolved", "status_20"}  # status_20 = 项目经理已验收
+CLOSED_STORY_STATUSES = {"closed", "resolved", "rejected", "status_20"}  # status_20 = 项目经理已验收；rejected = 已拒绝
 CLOSED_BUG_STATUSES = {"closed"}
 
 # ----- 状态码映射 -----

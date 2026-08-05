@@ -127,6 +127,7 @@ bash scripts/tapd.sh move <项目ID> <天数> <需求ID...>
 ```
 - 必须包含**负责人**列，展示给用户时不可省略
 - High 标粗；排期为空显示 "-"；按项目分组
+- **过滤规则：状态为"已拒绝"（rejected）、已验收（resolved/status_20）、已关闭（closed）的条目不展示**
 
 ### 花费
 ```
@@ -162,7 +163,7 @@ bash scripts/tapd.sh move <项目ID> <天数> <需求ID...>
 1. **父需求不可记工时**：有子需求的父级 story 调用 `POST /timesheets` 返回 422
 2. **bug 查 developer 无效**：缺陷查询不要用 `developer` 参数，改用 `current_owner`
 3. **effort 是字符串**：TAPD API 返回的 `effort` 字段是字符串而非数字
-4. **查待办不要加状态过滤**：用户要所有未完成的，让脚本自动过滤已关闭/已验收的
+4. **查待办不要加状态过滤**：用户要所有未完成的，让脚本自动过滤已关闭/已验收/已拒绝的
 5. **并发查询优先**：用 ThreadPoolExecutor 并行查项目，避免串行超时
 6. **REST API > mcporter**：查询和工时操作全部使用 REST API（`https://api.tapd.cn/*`），速度比 mcporter 快约 30 倍（0.4s vs 12s）
 7. **story/task 更新需要 JSON body + ?s=mcp**：普通 form POST 到 `/stories/update` 返回 403。必须用 JSON body + `?s=mcp` 参数 + `Via: mcp` header，直接 POST 到 `/stories`（不是 `/stories/update`）
